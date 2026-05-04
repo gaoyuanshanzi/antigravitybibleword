@@ -79,59 +79,58 @@ async function getIndexes(): Promise<IndexesType> {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { reference, keywords } = body;
+    const { reference, keywords, page = 1, limit = 50 } = body;
     
     const indexes = await getIndexes();
     const results = [];
+    const queryRefs = reference ? reference.split(',').map((r: string) => r.trim()).filter(Boolean) : [];
 
-    // Search logic
-    if (reference) {
-      // Parse references like "Genesis 1:1, Genesis 1:2"
-      const refs = reference.split(',').map((r: string) => r.trim());
-      for (const ref of refs) {
-        // Expand ranges if necessary (e.g. Genesis 1:1-3) - For now, simple exact match
-        // A full app would use a bible reference parser like `bible-reference-parser`
-        if (indexes.kjv.has(ref) || indexes.hebrew.has(ref)) {
-          results.push({
-            reference: ref,
-            kjv: { text: indexes.kjv.get(ref) || 'N/A' },
-            korean: { text: indexes.korean.get(ref) || 'N/A' },
-            hebrew: { text: indexes.hebrew.get(ref) || 'N/A' },
-            greek: { text: indexes.greek.get(ref) || 'N/A' }
-          });
+    let skipped = 0;
+    const skipCount = (page - 1) * limit;
+
+    for (const [ref, text] of indexes.kjv.entries()) {
+      let match = true;
+
+      // Reference Matching
+      if (queryRefs.length > 0) {
+        match = false;
+        const idxLower = ref.toLowerCase();
+        for (const q of queryRefs) {
+          const qLower = q.toLowerCase();
+          if (idxLower === qLower) {
+            match = true; break;
+          }
+          if (idxLower.startsWith(qLower)) {
+            const nextChar = idxLower[qLower.length];
+            if (!nextChar || nextChar === ':' || nextChar === ' ') {
+              match = true; break;
+            }
+          }
         }
       }
-    } else {
-      // Keyword search or default Gen 1:1 to Gen 1:30
-      // We will iterate over the KJV index keys and match filters
-      let count = 0;
-      for (const [ref, text] of indexes.kjv.entries()) {
-        if (count >= 50) break; // Limit to 50 results
-        
-        let match = true;
-        
-        if (keywords) {
-          if (keywords.kjv && !text.toLowerCase().includes(keywords.kjv.toLowerCase())) match = false;
-          
-          if (match && keywords.korean) {
-            const korText = indexes.korean.get(ref) || '';
-            if (!korText.includes(keywords.korean)) match = false;
-          }
-          if (match && keywords.hebrew) {
-            const hebText = indexes.hebrew.get(ref) || '';
-            if (!hebText.includes(keywords.hebrew)) match = false;
-          }
-          if (match && keywords.greek) {
-            const grkText = indexes.greek.get(ref) || '';
-            if (!grkText.includes(keywords.greek)) match = false;
-          }
-          
-          // If all keywords are empty, just return the first verses (Genesis 1)
-          const allEmpty = !keywords.kjv && !keywords.korean && !keywords.hebrew && !keywords.greek;
-          if (allEmpty) match = true;
-        }
 
-        if (match) {
+      // Keyword Matching
+      if (match && keywords) {
+        if (keywords.kjv && !text.toLowerCase().includes(keywords.kjv.toLowerCase())) match = false;
+        
+        if (match && keywords.korean) {
+          const korText = indexes.korean.get(ref) || '';
+          if (!korText.includes(keywords.korean)) match = false;
+        }
+        if (match && keywords.hebrew) {
+          const hebText = indexes.hebrew.get(ref) || '';
+          if (!hebText.includes(keywords.hebrew)) match = false;
+        }
+        if (match && keywords.greek) {
+          const grkText = indexes.greek.get(ref) || '';
+          if (!grkText.includes(keywords.greek)) match = false;
+        }
+      }
+
+      if (match) {
+        if (skipped < skipCount) {
+          skipped++;
+        } else {
           results.push({
             reference: ref,
             kjv: { text: text },
@@ -139,7 +138,7 @@ export async function POST(req: Request) {
             hebrew: { text: indexes.hebrew.get(ref) || 'N/A' },
             greek: { text: indexes.greek.get(ref) || 'N/A' }
           });
-          count++;
+          if (results.length >= limit) break;
         }
       }
     }

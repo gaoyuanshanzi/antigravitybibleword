@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Papa from 'papaparse';
 import { Search, Settings2, FileDown } from 'lucide-react';
+import { useInView } from 'react-intersection-observer';
 import { useAppContext } from '@/context/AppContext';
 import AnalysisModal from './AnalysisModal';
 
@@ -17,22 +18,30 @@ export default function BibleGrid() {
   });
   
   const [selectedWord, setSelectedWord] = useState<{word: string, ref: string} | null>(null);
+  
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const { ref, inView } = useInView();
 
   const handleSearch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setIsSearching(true);
+    setPage(1);
+    setHasMore(true);
     
     try {
       const response = await fetch('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reference: referenceQuery, keywords: keywordQueries })
+        body: JSON.stringify({ reference: referenceQuery, keywords: keywordQueries, page: 1, limit: 50 })
       });
       
       if (!response.ok) throw new Error('Search failed');
       
       const data = await response.json();
       setSearchResults(data.results);
+      if (data.results.length < 50) setHasMore(false);
     } catch (err) {
       console.error(err);
       alert('An error occurred while searching.');
@@ -40,6 +49,40 @@ export default function BibleGrid() {
       setIsSearching(false);
     }
   };
+
+  const loadMore = async () => {
+    if (isLoadingMore || !hasMore || isSearching) return;
+    setIsLoadingMore(true);
+    const nextPage = page + 1;
+    setPage(nextPage);
+
+    try {
+      const response = await fetch('/api/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reference: referenceQuery, keywords: keywordQueries, page: nextPage, limit: 50 })
+      });
+      
+      if (!response.ok) throw new Error('Search failed');
+      
+      const data = await response.json();
+      setSearchResults(prev => [...prev, ...data.results]);
+      if (data.results.length < 50) setHasMore(false);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (inView && hasMore && !isSearching && !isLoadingMore) {
+      setTimeout(() => {
+        loadMore();
+      }, 0);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inView, hasMore, isSearching, isLoadingMore]);
 
   const exportCSV = () => {
     if (!searchResults.length) return;
@@ -171,6 +214,13 @@ export default function BibleGrid() {
                   </div>
                 </div>
               ))
+            )}
+            
+            {hasMore && !isSearching && searchResults.length > 0 && (
+              <div ref={ref} className="p-8 text-center text-blue-500 flex flex-col items-center">
+                <Settings2 size={32} className="mb-2 animate-spin opacity-50" />
+                <p className="text-sm">Loading more verses...</p>
+              </div>
             )}
           </div>
         </div>

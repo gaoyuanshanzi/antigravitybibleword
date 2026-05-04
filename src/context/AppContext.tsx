@@ -16,9 +16,9 @@ interface AppContextType {
   geminiApiKey: string;
   setGeminiApiKey: (val: string) => void;
   searchResults: BibleRow[];
-  setSearchResults: (val: BibleRow[]) => void;
+  setSearchResults: React.Dispatch<React.SetStateAction<BibleRow[]>>;
   isSearching: boolean;
-  setIsSearching: (val: boolean) => void;
+  setIsSearching: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);

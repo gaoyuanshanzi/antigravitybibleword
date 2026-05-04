@@ -1,0 +1,31 @@
+
+> antigravitybibleword@0.1.0 lint
+> eslint
+
+
+D:\antigravitybibleword\scripts\downloadBibles.js
+  1:12  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+  2:15  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+  3:14  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+
+D:\antigravitybibleword\src\components\BibleGrid.tsx
+  80:7  error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+D:\antigravitybibleword\src\components\BibleGrid.tsx:80:7
+  78 |   React.useEffect(() => {
+  79 |     if (inView && hasMore && !isSearching && !isLoadingMore) {
+> 80 |       loadMore();
+     |       ^^^^^^^^ Avoid calling setState() directly within an effect
+  81 |     }
+  82 |   }, [inView, hasMore, isSearching, isLoadingMore]);
+  83 |  react-hooks/set-state-in-effect
+  82:6  warning  React Hook React.useEffect has a missing dependency: 'loadMore'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      react-hooks/exhaustive-deps
+
+✖ 5 problems (4 errors, 1 warning)
+
