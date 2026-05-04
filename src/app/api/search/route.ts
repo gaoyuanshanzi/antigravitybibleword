@@ -13,9 +13,10 @@ async function loadBibles() {
     try {
       const filePath = path.join(dataDir, `${name}.json`);
       const fileContent = await fs.readFile(filePath, 'utf-8');
-      return JSON.parse(fileContent);
-    } catch {
-      console.error(`Failed to load ${name}.json`);
+      const cleanContent = fileContent.replace(/^\uFEFF/, '');
+      return JSON.parse(cleanContent);
+    } catch (e) {
+      console.error(`Failed to load ${name}.json`, e);
       return null;
     }
   };
