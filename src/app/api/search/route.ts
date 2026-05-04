@@ -53,9 +53,16 @@ function createIndex(bibleJson: unknown, isFlat = false) {
   return index;
 }
 
-let indexCache: unknown = null;
+type IndexesType = {
+  kjv: Map<string, string>;
+  korean: Map<string, string>;
+  greek: Map<string, string>;
+  hebrew: Map<string, string>;
+};
 
-async function getIndexes() {
+let indexCache: IndexesType | null = null;
+
+async function getIndexes(): Promise<IndexesType> {
   if (indexCache) return indexCache;
   const bibles = await loadBibles() as { kjv: unknown; korean: unknown; greek: unknown; hebrew: unknown; };
   
