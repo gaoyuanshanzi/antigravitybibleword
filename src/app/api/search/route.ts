@@ -123,7 +123,7 @@ export async function POST(req: Request) {
 
     const allMatches: string[] = [];
 
-    for (const [ref, text] of indexes.kjv.entries()) {
+    for (const [ref, text] of indexes.asv.entries()) {
       let match = true;
 
       // Reference Matching
@@ -154,11 +154,11 @@ export async function POST(req: Request) {
 
       // Keyword Matching
       if (match && keywords) {
-        if (keywords.kjv && !text.toLowerCase().includes(keywords.kjv.toLowerCase())) match = false;
+        if (keywords.asv && !text.toLowerCase().includes(keywords.asv.toLowerCase())) match = false;
         
-        if (match && keywords.asv) {
-          const asvText = indexes.asv.get(ref) || '';
-          if (!asvText.toLowerCase().includes(keywords.asv.toLowerCase())) match = false;
+        if (match && keywords.kjv) {
+          const kjvText = indexes.kjv.get(ref) || '';
+          if (!kjvText.toLowerCase().includes(keywords.kjv.toLowerCase())) match = false;
         }
         if (match && keywords.korean) {
           const korText = indexes.korean.get(ref) || '';

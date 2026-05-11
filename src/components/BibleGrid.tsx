@@ -23,6 +23,7 @@ export default function BibleGrid() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const { ref, inView } = useInView();
 
   const handleSearch = async (e?: React.FormEvent) => {
@@ -86,28 +87,46 @@ export default function BibleGrid() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inView, hasMore, isSearching, isLoadingMore]);
 
-  const exportCSV = () => {
-    if (!searchResults.length) return;
+  const exportCSV = async () => {
+    if (!searchResults.length || isExporting) return;
     
-    const csvData = searchResults.map(row => ({
-      Reference: row.reference,
-      KJV: row.kjv.text,
-      ASV: row.asv?.text || '',
-      Korean: row.korean.text,
-      Hebrew: row.hebrew.text,
-      Greek: row.greek.text
-    }));
-    
-    const csv = Papa.unparse(csvData);
-    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', 'bible_export.csv');
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    setIsExporting(true);
+    try {
+      const response = await fetch('/api/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reference: referenceQuery, keywords: keywordQueries, page: 1, limit: 999999 })
+      });
+      
+      if (!response.ok) throw new Error('Search failed');
+      
+      const data = await response.json();
+      
+      const csvData = data.results.map((row: any) => ({
+        Reference: row.reference,
+        ASV: row.asv?.text || '',
+        KJV: row.kjv?.text || '',
+        Korean: row.korean?.text || '',
+        Hebrew: row.hebrew?.text || '',
+        Greek: row.greek?.text || ''
+      }));
+      
+      const csv = Papa.unparse(csvData);
+      const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', 'bible_export.csv');
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error(err);
+      alert('An error occurred while exporting.');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
@@ -145,11 +164,11 @@ export default function BibleGrid() {
           )}
           <button 
             onClick={exportCSV}
-            disabled={searchResults.length === 0}
+            disabled={searchResults.length === 0 || isExporting}
             className="px-4 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-sm font-semibold hover:bg-emerald-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 whitespace-nowrap"
           >
-            <FileDown size={18} />
-            Export CSV
+            {isExporting ? <Settings2 size={18} className="animate-spin" /> : <FileDown size={18} />}
+            {isExporting ? 'Exporting...' : 'Export CSV'}
           </button>
         </div>
       </div>
@@ -165,8 +184,8 @@ export default function BibleGrid() {
             
             {/* Version Headers with Keyword Search */}
             {[
-              { id: 'kjv', label: 'KJV (English)' },
               { id: 'asv', label: 'ASV (English)' },
+              { id: 'kjv', label: 'KJV (English)' },
               { id: 'korean', label: '개역성경 (Korean)' },
               { id: 'hebrew', label: 'Masoretic (Hebrew)' },
               { id: 'greek', label: 'Greek (LXX/TR)' }
@@ -206,11 +225,11 @@ export default function BibleGrid() {
                   </div>
                   
                   <div className="p-4 border-r border-gray-100 text-gray-800 leading-relaxed text-sm">
-                    {row.kjv.text}
+                    {row.asv?.text || 'N/A'}
                   </div>
 
                   <div className="p-4 border-r border-gray-100 text-gray-800 leading-relaxed text-sm">
-                    {row.asv?.text || 'N/A'}
+                    {row.kjv?.text || 'N/A'}
                   </div>
                   
                   <div className="p-4 border-r border-gray-100 text-gray-800 leading-relaxed text-sm font-sans">
