@@ -8,10 +8,11 @@ import { useAppContext } from '@/context/AppContext';
 import AnalysisModal from './AnalysisModal';
 
 export default function BibleGrid() {
-  const { searchResults, isSearching, setSearchResults, setIsSearching } = useAppContext();
+  const { searchResults, isSearching, setSearchResults, setIsSearching, totalMatches, setTotalMatches } = useAppContext();
   const [referenceQuery, setReferenceQuery] = useState('');
   const [keywordQueries, setKeywordQueries] = useState({
     kjv: '',
+    asv: '',
     korean: '',
     hebrew: '',
     greek: ''
@@ -41,6 +42,7 @@ export default function BibleGrid() {
       
       const data = await response.json();
       setSearchResults(data.results);
+      setTotalMatches(data.totalMatches || 0);
       if (data.results.length < 50) setHasMore(false);
     } catch (err) {
       console.error(err);
@@ -90,6 +92,7 @@ export default function BibleGrid() {
     const csvData = searchResults.map(row => ({
       Reference: row.reference,
       KJV: row.kjv.text,
+      ASV: row.asv?.text || '',
       Korean: row.korean.text,
       Hebrew: row.hebrew.text,
       Greek: row.greek.text
@@ -134,21 +137,28 @@ export default function BibleGrid() {
           </button>
         </form>
 
-        <button 
-          onClick={exportCSV}
-          disabled={searchResults.length === 0}
-          className="px-4 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-sm font-semibold hover:bg-emerald-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-        >
-          <FileDown size={18} />
-          Export CSV
-        </button>
+        <div className="flex items-center gap-3">
+          {totalMatches > 0 && !isSearching && (
+            <span className="px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-semibold rounded-full border border-blue-200 shadow-sm whitespace-nowrap">
+              Total Found: {totalMatches}
+            </span>
+          )}
+          <button 
+            onClick={exportCSV}
+            disabled={searchResults.length === 0}
+            className="px-4 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-sm font-semibold hover:bg-emerald-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 whitespace-nowrap"
+          >
+            <FileDown size={18} />
+            Export CSV
+          </button>
+        </div>
       </div>
 
       {/* Grid Area */}
       <div className="flex-1 overflow-auto bg-gray-50/50">
         <div className="min-w-[1200px] w-full">
           {/* Headers */}
-          <div className="grid grid-cols-5 border-b border-blue-200 bg-blue-50 sticky top-0 z-20 shadow-sm">
+          <div className="grid grid-cols-6 border-b border-blue-200 bg-blue-50 sticky top-0 z-20 shadow-sm">
             <div className="p-3 font-semibold text-blue-900 border-r border-blue-200 flex items-center justify-center bg-blue-100/50">
               Reference
             </div>
@@ -156,9 +166,10 @@ export default function BibleGrid() {
             {/* Version Headers with Keyword Search */}
             {[
               { id: 'kjv', label: 'KJV (English)' },
+              { id: 'asv', label: 'ASV (English)' },
               { id: 'korean', label: '개역성경 (Korean)' },
               { id: 'hebrew', label: 'Masoretic (Hebrew)' },
-              { id: 'greek', label: 'Septuagint (Greek)' }
+              { id: 'greek', label: 'Greek (LXX/TR)' }
             ].map((col) => (
               <div key={col.id} className="p-3 border-r border-blue-200 last:border-r-0 flex flex-col gap-2">
                 <div className="font-semibold text-blue-900 text-center text-sm">{col.label}</div>
@@ -189,13 +200,17 @@ export default function BibleGrid() {
               </div>
             ) : (
               searchResults.map((row, idx) => (
-                <div key={idx} className="grid grid-cols-5 hover:bg-blue-50/50 transition-colors group">
+                <div key={idx} className="grid grid-cols-6 hover:bg-blue-50/50 transition-colors group">
                   <div className="p-4 border-r border-gray-100 text-sm font-medium text-gray-500 flex items-center justify-center text-center">
                     {row.reference}
                   </div>
                   
                   <div className="p-4 border-r border-gray-100 text-gray-800 leading-relaxed text-sm">
                     {row.kjv.text}
+                  </div>
+
+                  <div className="p-4 border-r border-gray-100 text-gray-800 leading-relaxed text-sm">
+                    {row.asv?.text || 'N/A'}
                   </div>
                   
                   <div className="p-4 border-r border-gray-100 text-gray-800 leading-relaxed text-sm font-sans">

@@ -22,11 +22,13 @@ async function loadBibles() {
   };
 
   const kjv = await loadFile('kjv');
+  const asv = await loadFile('asv');
   const korean = await loadFile('korean');
   const greek = await loadFile('greek');
   const hebrew = await loadFile('hebrew'); // Note: Hebrew is flat mocked array
+  const tr = await loadFile('tr');
 
-  bibleCache = { kjv, korean, greek, hebrew };
+  bibleCache = { kjv, asv, korean, greek, hebrew, tr };
   return bibleCache;
 }
 
@@ -56,6 +58,7 @@ function createIndex(bibleJson: unknown, isFlat = false) {
 
 type IndexesType = {
   kjv: Map<string, string>;
+  asv: Map<string, string>;
   korean: Map<string, string>;
   greek: Map<string, string>;
   hebrew: Map<string, string>;
@@ -65,12 +68,21 @@ let indexCache: IndexesType | null = null;
 
 async function getIndexes(): Promise<IndexesType> {
   if (indexCache) return indexCache;
-  const bibles = await loadBibles() as { kjv: unknown; korean: unknown; greek: unknown; hebrew: unknown; };
+  const bibles = await loadBibles() as { kjv: unknown; asv: unknown; korean: unknown; greek: unknown; hebrew: unknown; tr: unknown; };
   
+  const greekMap = createIndex(bibles.greek, false);
+  const trMap = createIndex(bibles.tr, true);
+  for (const [ref, text] of trMap.entries()) {
+    if (text && text.trim().length > 0) {
+      greekMap.set(ref, text);
+    }
+  }
+
   indexCache = {
     kjv: createIndex(bibles.kjv, false),
+    asv: createIndex(bibles.asv, true),
     korean: createIndex(bibles.korean, false),
-    greek: createIndex(bibles.greek, false),
+    greek: greekMap,
     hebrew: createIndex(bibles.hebrew, true) // Mock was flat format
   };
   
@@ -86,25 +98,55 @@ export async function POST(req: Request) {
     const results = [];
     const queryRefs = reference ? reference.split(',').map((r: string) => r.trim()).filter(Boolean) : [];
 
-    let skipped = 0;
-    const skipCount = (page - 1) * limit;
+    type ParsedQuery = { qBook: string, qChap: string | null, qVerse: string | null, qVerseEnd: string | null };
+    const parsedQueries = queryRefs.map((q: string) => {
+      const match = q.match(/^(.+?)(?:\s+(\d[\d:\-]*))?$/);
+      if (!match) return null;
+      const qBook = match[1].toLowerCase().trim();
+      const cvPart = match[2];
+      let qChap = null, qVerse = null, qVerseEnd = null;
+      if (cvPart) {
+        if (cvPart.includes(':')) {
+          const [c, v] = cvPart.split(':');
+          qChap = c;
+          if (v.includes('-')) {
+            [qVerse, qVerseEnd] = v.split('-');
+          } else {
+            qVerse = v;
+          }
+        } else {
+          qChap = cvPart;
+        }
+      }
+      return { qBook, qChap, qVerse, qVerseEnd } as ParsedQuery;
+    }).filter(Boolean) as ParsedQuery[];
+
+    const allMatches: string[] = [];
 
     for (const [ref, text] of indexes.kjv.entries()) {
       let match = true;
 
       // Reference Matching
-      if (queryRefs.length > 0) {
+      if (parsedQueries.length > 0) {
         match = false;
-        const idxLower = ref.toLowerCase();
-        for (const q of queryRefs) {
-          const qLower = q.toLowerCase();
-          if (idxLower === qLower) {
-            match = true; break;
-          }
-          if (idxLower.startsWith(qLower)) {
-            const nextChar = idxLower[qLower.length];
-            if (!nextChar || nextChar === ':' || nextChar === ' ') {
-              match = true; break;
+        const refLastSpace = ref.lastIndexOf(' ');
+        const refBook = ref.substring(0, refLastSpace).toLowerCase();
+        const refCV = ref.substring(refLastSpace + 1);
+        const [refChap, refVerse] = refCV.split(':');
+
+        for (const qObj of parsedQueries) {
+          if (refBook.startsWith(qObj.qBook) || refBook.replace(/\s+/g, '').startsWith(qObj.qBook.replace(/\s+/g, ''))) {
+            if (!qObj.qChap) { match = true; break; }
+            if (refChap === qObj.qChap) {
+              if (!qObj.qVerse) { match = true; break; }
+              if (!qObj.qVerseEnd) {
+                if (refVerse === qObj.qVerse) { match = true; break; }
+              } else {
+                const vNum = parseInt(refVerse, 10);
+                const startV = parseInt(qObj.qVerse, 10);
+                const endV = parseInt(qObj.qVerseEnd, 10);
+                if (vNum >= startV && vNum <= endV) { match = true; break; }
+              }
             }
           }
         }
@@ -114,6 +156,10 @@ export async function POST(req: Request) {
       if (match && keywords) {
         if (keywords.kjv && !text.toLowerCase().includes(keywords.kjv.toLowerCase())) match = false;
         
+        if (match && keywords.asv) {
+          const asvText = indexes.asv.get(ref) || '';
+          if (!asvText.toLowerCase().includes(keywords.asv.toLowerCase())) match = false;
+        }
         if (match && keywords.korean) {
           const korText = indexes.korean.get(ref) || '';
           if (!korText.includes(keywords.korean)) match = false;
@@ -129,22 +175,26 @@ export async function POST(req: Request) {
       }
 
       if (match) {
-        if (skipped < skipCount) {
-          skipped++;
-        } else {
-          results.push({
-            reference: ref,
-            kjv: { text: text },
-            korean: { text: indexes.korean.get(ref) || 'N/A' },
-            hebrew: { text: indexes.hebrew.get(ref) || 'N/A' },
-            greek: { text: indexes.greek.get(ref) || 'N/A' }
-          });
-          if (results.length >= limit) break;
-        }
+        allMatches.push(ref);
       }
     }
 
-    return NextResponse.json({ results });
+    const totalMatches = allMatches.length;
+    const skipCount = (page - 1) * limit;
+    const paginatedRefs = allMatches.slice(skipCount, skipCount + limit);
+
+    for (const ref of paginatedRefs) {
+      results.push({
+        reference: ref,
+        kjv: { text: indexes.kjv.get(ref) || 'N/A' },
+        asv: { text: indexes.asv.get(ref) || 'N/A' },
+        korean: { text: indexes.korean.get(ref) || 'N/A' },
+        hebrew: { text: indexes.hebrew.get(ref) || 'N/A' },
+        greek: { text: indexes.greek.get(ref) || 'N/A' }
+      });
+    }
+
+    return NextResponse.json({ results, totalMatches });
   } catch (error: unknown) {
     console.error(error);
     return NextResponse.json({ error: 'Search failed' }, { status: 500 });
